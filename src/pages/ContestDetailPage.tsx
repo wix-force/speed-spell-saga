@@ -13,12 +13,13 @@ import { ArrowLeft, Play } from 'lucide-react';
 
 export default function ContestDetailPage() {
   const { id } = useParams();
-  const contest = mockContests.find(c => c.id === id);
 
   const [phase, setPhase] = useState<'info' | 'typing' | 'result'>('info');
   const [attemptNum, setAttemptNum] = useState(0);
   const [metrics, setMetrics] = useState<TypingMetrics>({ wpm: 0, accuracy: 100, errors: 0, elapsed: 0, progress: 0 });
   const [lastResult, setLastResult] = useState<TypingMetrics | null>(null);
+
+  const contest = mockContests.find(c => c.id === id);
 
   if (!contest) {
     return (
@@ -37,10 +38,10 @@ export default function ContestDetailPage() {
     setPhase('typing');
   };
 
-  const handleComplete = useCallback((m: TypingMetrics) => {
+  const handleComplete = (m: TypingMetrics) => {
     setLastResult(m);
     setPhase('result');
-  }, []);
+  };
 
   const handleNextAttempt = () => {
     startAttempt();
