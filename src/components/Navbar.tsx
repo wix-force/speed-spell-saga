@@ -3,11 +3,14 @@ import { Keyboard, Trophy, User, BarChart3, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+import { Shield } from 'lucide-react';
+
 const navItems = [
   { to: '/practice', label: 'Practice', icon: Keyboard },
   { to: '/contest', label: 'Contests', icon: Trophy },
   { to: '/leaderboard', label: 'Leaderboard', icon: BarChart3 },
   { to: '/profile', label: 'Profile', icon: User },
+  { to: '/admin', label: 'Admin', icon: Shield },
 ];
 
 export default function Navbar() {
