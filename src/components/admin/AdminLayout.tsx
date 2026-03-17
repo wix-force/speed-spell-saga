@@ -6,6 +6,7 @@ import {
   Menu, X,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '@/contexts/AuthContext';
 
 const sidebarItems = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -20,6 +21,7 @@ export default function AdminLayout() {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { user, logout } = useAuth();
 
   const isActive = (path: string, end?: boolean) => {
     if (end) return location.pathname === path;
@@ -28,7 +30,6 @@ export default function AdminLayout() {
 
   const SidebarContent = ({ mobile = false }: { mobile?: boolean }) => (
     <div className="flex flex-col h-full">
-      {/* Logo */}
       <div className="p-4 border-b border-border/50">
         <Link to="/" className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
@@ -45,7 +46,6 @@ export default function AdminLayout() {
         </Link>
       </div>
 
-      {/* Nav items */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {sidebarItems.map((item) => {
           const active = isActive(item.to, item.end);
@@ -70,22 +70,25 @@ export default function AdminLayout() {
         })}
       </nav>
 
-      {/* Footer */}
       <div className="p-3 border-t border-border/50">
         {(!collapsed || mobile) ? (
           <div className="flex items-center gap-3 px-3 py-2">
-            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold text-primary">A</div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium truncate">Admin</div>
-              <div className="text-xs text-muted-foreground truncate">admin@typearena.com</div>
+            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold text-primary">
+              {user?.username?.[0]?.toUpperCase() || 'A'}
             </div>
-            <button className="text-muted-foreground hover:text-foreground">
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium truncate">{user?.username || 'Admin'}</div>
+              <div className="text-xs text-muted-foreground truncate">{user?.email || 'admin@typearena.com'}</div>
+            </div>
+            <button onClick={logout} className="text-muted-foreground hover:text-foreground">
               <LogOut className="w-4 h-4" />
             </button>
           </div>
         ) : (
           <div className="flex justify-center">
-            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold text-primary">A</div>
+            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold text-primary">
+              {user?.username?.[0]?.toUpperCase() || 'A'}
+            </div>
           </div>
         )}
       </div>
@@ -94,7 +97,6 @@ export default function AdminLayout() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      {/* Desktop sidebar */}
       <aside
         className={`hidden lg:flex flex-col border-r border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-300 ${
           collapsed ? 'w-[68px]' : 'w-60'
@@ -110,7 +112,6 @@ export default function AdminLayout() {
         </button>
       </aside>
 
-      {/* Mobile sidebar overlay */}
       <AnimatePresence>
         {mobileOpen && (
           <>
@@ -134,9 +135,7 @@ export default function AdminLayout() {
         )}
       </AnimatePresence>
 
-      {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top navbar */}
         <header className="h-14 border-b border-border/50 bg-card/50 backdrop-blur-sm flex items-center justify-between px-4 lg:px-6 flex-shrink-0">
           <div className="flex items-center gap-3">
             <button className="lg:hidden text-muted-foreground" onClick={() => setMobileOpen(true)}>
@@ -157,7 +156,6 @@ export default function AdminLayout() {
           </div>
         </header>
 
-        {/* Page content */}
         <main className="flex-1 overflow-y-auto">
           <div className="p-4 lg:p-6 max-w-7xl mx-auto">
             <Outlet />

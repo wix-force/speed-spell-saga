@@ -1,35 +1,41 @@
-import { Users, Trophy, BarChart3, Gauge, Clock, TrendingUp } from 'lucide-react';
+import { Users, Trophy, BarChart3, Gauge } from 'lucide-react';
 import StatsCard from '@/components/StatsCard';
 import DataTable from '@/components/admin/DataTable';
-import { adminContests, adminActivity, adminUsers } from '@/lib/admin-data';
-import { AdminContest } from '@/lib/admin-data';
+import { adminContests, adminActivity, adminUsers, AdminContest } from '@/lib/admin-data';
 import { Badge } from '@/components/ui/badge';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useApiQuery } from '@/hooks/useApi';
 
 const statusBadge = (status: string) => {
   const styles: Record<string, string> = {
     upcoming: 'bg-muted text-muted-foreground',
     live: 'bg-success/10 text-success',
+    running: 'bg-success/10 text-success',
     ended: 'bg-secondary text-muted-foreground',
   };
-  return <Badge variant="outline" className={`capitalize ${styles[status] || ''}`}>{status}</Badge>;
+  return <Badge variant="outline" className={`capitalize ${styles[status] || ''}`}>{status === 'running' ? 'live' : status}</Badge>;
 };
 
-const contestColumns = [
-  { key: 'title', header: 'Contest', render: (c: AdminContest) => (
-    <Link to={`/admin/contests/${c.id}`} className="font-medium hover:text-primary transition-colors">{c.title}</Link>
-  )},
-  { key: 'status', header: 'Status', render: (c: AdminContest) => statusBadge(c.status) },
-  { key: 'participants', header: 'Players', render: (c: AdminContest) => <span className="font-mono">{c.participants}</span>, className: 'text-right' },
-  { key: 'avgWpm', header: 'Avg WPM', render: (c: AdminContest) => <span className="font-mono text-primary">{c.avgWpm || '—'}</span>, className: 'text-right' },
-];
-
 export default function AdminDashboardPage() {
-  const liveContests = adminContests.filter(c => c.status === 'live').length;
-  const totalUsers = adminUsers.length;
-  const totalAttempts = adminContests.reduce((sum, c) => sum + c.totalAttempts, 0);
-  const avgWpm = Math.round(adminContests.filter(c => c.avgWpm > 0).reduce((s, c) => s + c.avgWpm, 0) / (adminContests.filter(c => c.avgWpm > 0).length || 1));
+  const { data: analyticsData } = useApiQuery<any>(['admin-analytics'], '/admin/analytics');
+
+  const stats = analyticsData || {
+    totalUsers: adminUsers.length,
+    totalContests: adminContests.length,
+    totalAttempts: adminContests.reduce((sum, c) => sum + c.totalAttempts, 0),
+    activeContests: adminContests.filter(c => c.status === 'live').length,
+    averageWPM: Math.round(adminContests.filter(c => c.avgWpm > 0).reduce((s, c) => s + c.avgWpm, 0) / (adminContests.filter(c => c.avgWpm > 0).length || 1)),
+  };
+
+  const contestColumns = [
+    { key: 'title', header: 'Contest', render: (c: AdminContest) => (
+      <Link to={`/admin/contests/${c.id}`} className="font-medium hover:text-primary transition-colors">{c.title}</Link>
+    )},
+    { key: 'status', header: 'Status', render: (c: AdminContest) => statusBadge(c.status) },
+    { key: 'participants', header: 'Players', render: (c: AdminContest) => <span className="font-mono">{c.participants}</span>, className: 'text-right' },
+    { key: 'avgWpm', header: 'Avg WPM', render: (c: AdminContest) => <span className="font-mono text-primary">{c.avgWpm || '—'}</span>, className: 'text-right' },
+  ];
 
   return (
     <div className="space-y-6">
@@ -38,24 +44,22 @@ export default function AdminDashboardPage() {
         <p className="text-sm text-muted-foreground mt-1">Overview of your typing platform</p>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 }}>
-          <StatsCard icon={<Users className="w-5 h-5" />} label="Total Users" value={totalUsers.toLocaleString()} subtitle="+12 this week" />
+          <StatsCard icon={<Users className="w-5 h-5" />} label="Total Users" value={stats.totalUsers?.toLocaleString()} />
         </motion.div>
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-          <StatsCard icon={<Trophy className="w-5 h-5" />} label="Active Contests" value={liveContests} subtitle={`${adminContests.length} total`} />
+          <StatsCard icon={<Trophy className="w-5 h-5" />} label="Active Contests" value={stats.activeContests} subtitle={`${stats.totalContests} total`} />
         </motion.div>
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-          <StatsCard icon={<BarChart3 className="w-5 h-5" />} label="Total Attempts" value={totalAttempts.toLocaleString()} subtitle="+234 today" />
+          <StatsCard icon={<BarChart3 className="w-5 h-5" />} label="Total Attempts" value={stats.totalAttempts?.toLocaleString()} />
         </motion.div>
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-          <StatsCard icon={<Gauge className="w-5 h-5" />} label="Average WPM" value={avgWpm} subtitle="↑ 3.2% from last week" />
+          <StatsCard icon={<Gauge className="w-5 h-5" />} label="Average WPM" value={stats.averageWPM || 0} />
         </motion.div>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Recent contests */}
         <div className="lg:col-span-2">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-semibold">Recent Contests</h2>
@@ -64,7 +68,6 @@ export default function AdminDashboardPage() {
           <DataTable columns={contestColumns} data={adminContests.slice(0, 5)} keyExtractor={c => c.id} />
         </div>
 
-        {/* Activity feed */}
         <div>
           <h2 className="text-lg font-semibold mb-3">Recent Activity</h2>
           <div className="glass-card divide-y divide-border/30">
@@ -83,7 +86,6 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* Mini leaderboard */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold">Top Players</h2>
