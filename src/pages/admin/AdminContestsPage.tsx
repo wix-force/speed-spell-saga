@@ -5,16 +5,33 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import DataTable from '@/components/admin/DataTable';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
-import { adminContests, AdminContest } from '@/lib/admin-data';
 import { useApiQuery } from '@/hooks/useApi';
 import apiClient from '@/lib/apiClient';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
+import { Loader2 } from 'lucide-react';
+
+interface ContestItem {
+  id: string;
+  title: string;
+  difficulty: string;
+  duration: number;
+  startTime: string;
+  participants: number;
+  maxAttempts: number;
+  status: string;
+  rankingMethod: string;
+  passageCount: number;
+  maxParticipants: number;
+}
 
 const statusBadge = (status: string) => {
-  const s: Record<string, string> = { upcoming: 'bg-muted text-muted-foreground', live: 'bg-success/10 text-success', running: 'bg-success/10 text-success', ended: 'bg-secondary text-muted-foreground' };
+  const s: Record<string, string> = { upcoming: 'bg-muted text-muted-foreground', running: 'bg-success/10 text-success', ended: 'bg-secondary text-muted-foreground' };
   const label = status === 'running' ? 'live' : status;
-  return <Badge variant="outline" className={`capitalize ${s[status] || ''}`}>{label === 'live' && <span className="w-1.5 h-1.5 bg-success rounded-full mr-1 inline-block animate-pulse" />}{label}</Badge>;
+  return <Badge variant="outline" className={`capitalize ${s[status] || ''}`}>
+    {status === 'running' && <span className="w-1.5 h-1.5 bg-success rounded-full mr-1 inline-block animate-pulse" />}
+    {label}
+  </Badge>;
 };
 
 const diffBadge = (d: string) => {
@@ -27,31 +44,25 @@ export default function AdminContestsPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
-  const { data: apiContests } = useApiQuery<any>(['admin-contests'], '/contests');
+  const { data: apiContests, isLoading } = useApiQuery<any>(['admin-contests'], '/contests');
   const contestItems = Array.isArray(apiContests) ? apiContests : apiContests?.contests ?? [];
 
-  const contests: AdminContest[] = contestItems.length
-    ? contestItems.map((c: any) => ({
-        id: c._id || c.id,
-        title: c.title,
-        difficulty: c.difficulty,
-        duration: c.duration,
-        startTime: c.startTime,
-        participants: c.participantsCount || 0,
-        maxAttempts: c.maxAttempts,
-        status: c.status === 'running' ? 'live' : c.status,
-        rankingMethod: c.rankingMethod,
-        passageCount: c.passagePool?.length || 0,
-        totalAttempts: 0,
-        avgWpm: 0,
-        completionRate: 0,
-        randomPassageMode: c.randomPassage || false,
-        maxParticipants: 500,
-        createdAt: c.createdAt,
-      }))
-    : adminContests;
+  const contests: ContestItem[] = contestItems.map((c: any) => ({
+    id: c._id || c.id,
+    title: c.title,
+    difficulty: c.difficulty,
+    duration: c.duration,
+    startTime: c.startTime,
+    participants: c.participantsCount || 0,
+    maxAttempts: c.maxAttempts,
+    status: c.status,
+    rankingMethod: c.rankingMethod,
+    passageCount: c.passagePool?.length || 0,
+    maxParticipants: c.maxParticipants || 500,
+  }));
 
-  const filtered = filter === 'all' ? contests : contests.filter(c => c.status === filter);
+  const filterStatus = filter === 'live' ? 'running' : filter;
+  const filtered = filter === 'all' ? contests : contests.filter(c => c.status === filterStatus);
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -59,25 +70,25 @@ export default function AdminContestsPage() {
       await apiClient.delete(`/contests/${deleteId}`);
       queryClient.invalidateQueries({ queryKey: ['admin-contests'] });
       toast.success('Contest deleted');
-    } catch {
-      toast.success('Contest deleted');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to delete');
     }
     setDeleteId(null);
   };
 
   const columns = [
-    { key: 'title', header: 'Title', render: (c: AdminContest) => (
+    { key: 'title', header: 'Title', render: (c: ContestItem) => (
       <Link to={`/admin/contests/${c.id}`} className="font-medium hover:text-primary transition-colors">{c.title}</Link>
     )},
-    { key: 'difficulty', header: 'Difficulty', render: (c: AdminContest) => diffBadge(c.difficulty) },
-    { key: 'duration', header: 'Duration', render: (c: AdminContest) => <span className="font-mono text-muted-foreground">{c.duration}s</span> },
-    { key: 'startTime', header: 'Start Time', render: (c: AdminContest) => (
+    { key: 'difficulty', header: 'Difficulty', render: (c: ContestItem) => diffBadge(c.difficulty) },
+    { key: 'duration', header: 'Duration', render: (c: ContestItem) => <span className="font-mono text-muted-foreground">{c.duration}s</span> },
+    { key: 'startTime', header: 'Start Time', render: (c: ContestItem) => (
       <span className="text-muted-foreground text-xs">{new Date(c.startTime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
     )},
-    { key: 'maxAttempts', header: 'Attempts', render: (c: AdminContest) => <span className="font-mono">{c.maxAttempts}</span>, className: 'text-center' },
-    { key: 'status', header: 'Status', render: (c: AdminContest) => statusBadge(c.status) },
-    { key: 'participants', header: 'Players', render: (c: AdminContest) => <span className="font-mono">{c.participants}/{c.maxParticipants}</span>, className: 'text-right' },
-    { key: 'actions', header: '', render: (c: AdminContest) => (
+    { key: 'maxAttempts', header: 'Attempts', render: (c: ContestItem) => <span className="font-mono">{c.maxAttempts}</span>, className: 'text-center' },
+    { key: 'status', header: 'Status', render: (c: ContestItem) => statusBadge(c.status) },
+    { key: 'participants', header: 'Players', render: (c: ContestItem) => <span className="font-mono">{c.participants}</span>, className: 'text-right' },
+    { key: 'actions', header: '', render: (c: ContestItem) => (
       <div className="flex items-center gap-1 justify-end">
         <Link to={`/admin/contests/${c.id}`} className="w-8 h-8 rounded-lg hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
           <Eye className="w-4 h-4" />
@@ -118,7 +129,11 @@ export default function AdminContestsPage() {
         ))}
       </div>
 
-      <DataTable columns={columns} data={filtered} keyExtractor={c => c.id} />
+      {isLoading ? (
+        <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+      ) : (
+        <DataTable columns={columns} data={filtered} keyExtractor={c => c.id} />
+      )}
 
       <ConfirmDialog
         open={!!deleteId}

@@ -14,7 +14,6 @@ import { useApiQuery } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSocket } from '@/lib/socket';
 import { toast } from 'sonner';
-import { mockContests, mockPassages, mockLeaderboard } from '@/lib/mock-data';
 
 export default function ContestDetailPage() {
   const { id } = useParams();
@@ -28,39 +27,37 @@ export default function ContestDetailPage() {
   const [currentAttemptId, setCurrentAttemptId] = useState<string | null>(null);
   const [startingAttempt, setStartingAttempt] = useState(false);
 
-  // Fetch contest from API
   const { data: apiContest, isLoading } = useApiQuery<any>(['contest', id], `/contests/${id}`);
 
-  // Fetch leaderboard
-  const { data: apiLeaderboard, refetch: refetchLeaderboard } = useApiQuery<any[]>(
+  const { data: apiLeaderboard, refetch: refetchLeaderboard } = useApiQuery<any>(
     ['leaderboard', id],
     `/leaderboard/${id}`,
   );
 
-  // Fetch user attempts
   const { data: userAttempts, refetch: refetchAttempts } = useApiQuery<any[]>(
     ['attempts', id],
     `/attempt/user/${id}`,
     { enabled: isAuthenticated },
   );
 
-  const contest = apiContest
-    ? {
-        id: apiContest._id || apiContest.id,
-        title: apiContest.title,
-        difficulty: apiContest.difficulty,
-        duration: apiContest.duration,
-        startTime: apiContest.startTime,
-        participants: apiContest.participantsCount || 0,
-        maxAttempts: apiContest.maxAttempts,
-        status: apiContest.status === 'running' ? 'live' as const : apiContest.status,
-        rankingMethod: apiContest.rankingMethod,
-        passageCount: apiContest.passagePool?.length || 0,
-      }
-    : mockContests.find(c => c.id === id);
+  // Normalize contest data
+  const contest = apiContest ? {
+    id: apiContest._id || apiContest.id,
+    title: apiContest.title,
+    difficulty: apiContest.difficulty,
+    duration: apiContest.duration,
+    startTime: apiContest.startTime,
+    participants: apiContest.participantsCount || 0,
+    maxAttempts: apiContest.maxAttempts,
+    status: apiContest.status === 'running' ? 'live' as const : apiContest.status,
+    rankingMethod: apiContest.rankingMethod,
+    passageCount: apiContest.passagePool?.length || 0,
+  } : null;
 
-  const leaderboard: LeaderboardEntry[] = apiLeaderboard
-    ? apiLeaderboard.map((e: any, i: number) => ({
+  // Normalize leaderboard - handle both array and object responses
+  const leaderboardData = Array.isArray(apiLeaderboard) ? apiLeaderboard : apiLeaderboard?.leaderboard ?? apiLeaderboard ?? [];
+  const leaderboard: LeaderboardEntry[] = Array.isArray(leaderboardData)
+    ? leaderboardData.map((e: any, i: number) => ({
         rank: e.rank || i + 1,
         username: e.username,
         wpm: e.wpm,
@@ -68,20 +65,21 @@ export default function ContestDetailPage() {
         attemptNumber: e.attemptUsed || 1,
         status: 'finished' as const,
       }))
-    : mockLeaderboard;
+    : [];
 
-  // Socket events for realtime leaderboard
+  // Socket events
   useEffect(() => {
     const socket = getSocket();
     if (!socket || !id) return;
     socket.emit('join_contest', id);
-    socket.on('leaderboard_update', () => refetchLeaderboard());
-    return () => { socket.off('leaderboard_update'); };
+    const handleUpdate = () => refetchLeaderboard();
+    socket.on('leaderboard_update', handleUpdate);
+    return () => { socket.off('leaderboard_update', handleUpdate); };
   }, [id, refetchLeaderboard]);
 
   // Sync attempt count
   useEffect(() => {
-    if (userAttempts) setAttemptNum(userAttempts.length);
+    if (Array.isArray(userAttempts)) setAttemptNum(userAttempts.length);
   }, [userAttempts]);
 
   if (isLoading) {
@@ -112,15 +110,10 @@ export default function ContestDetailPage() {
       setMetrics({ wpm: 0, accuracy: 100, errors: 0, elapsed: 0, progress: 0 });
       setPhase('typing');
       const socket = getSocket();
-      if (socket) socket.emit('attempt_started', { contestId: id });
+      if (socket) socket.emit('attempt_started', { contestId: id, username: '' });
     } catch (err: any) {
-      // Fallback to mock
-      const mockP = mockPassages[attemptNum % mockPassages.length];
-      setPassage({ id: mockP.id, text: mockP.text });
-      setAttemptNum(n => n + 1);
-      setMetrics({ wpm: 0, accuracy: 100, errors: 0, elapsed: 0, progress: 0 });
-      setPhase('typing');
-      if (err.response?.data?.message) toast.error(err.response.data.message);
+      const msg = err.response?.data?.message || 'Failed to start attempt';
+      toast.error(msg);
     } finally {
       setStartingAttempt(false);
     }
@@ -130,27 +123,36 @@ export default function ContestDetailPage() {
     setLastResult(m);
     setPhase('result');
 
-    // Submit to backend
-    if (currentAttemptId) {
+    if (currentAttemptId && passage) {
       try {
-        const correctChars = Math.round((m.accuracy / 100) * passage!.text.length);
+        // Calculate correct chars from actual typing data
+        let correctChars = 0;
+        // We send the raw metrics - server recalculates
+        for (let i = 0; i < passage.text.length && i < (passage.text.length - m.errors + m.errors); i++) {
+          // The backend recalculates, we send our best count
+        }
+        // correctChars = total typed - errors
+        const totalTyped = Math.round(m.progress / 100 * passage.text.length);
+        correctChars = totalTyped - m.errors;
+
         await apiClient.post('/attempt/submit', {
           attemptId: currentAttemptId,
-          correctChars,
-          totalTyped: passage!.text.length,
+          correctChars: Math.max(correctChars, 0),
+          totalTyped,
           errors: m.errors,
         });
         refetchLeaderboard();
         refetchAttempts();
         const socket = getSocket();
-        if (socket) socket.emit('attempt_finished', { contestId: id });
+        if (socket) socket.emit('attempt_finished', { contestId: id, username: '' });
       } catch (err) {
         console.error('Submit failed:', err);
+        toast.error('Failed to submit result');
       }
     }
   };
 
-  const passageText = passage?.text || mockPassages[attemptNum % mockPassages.length].text;
+  const canAttempt = attemptNum < contest.maxAttempts && (contest.status === 'live' || contest.status === 'running');
 
   return (
     <div className="page-container max-w-4xl">
@@ -183,29 +185,35 @@ export default function ContestDetailPage() {
             <p className="text-sm text-muted-foreground mb-6">
               Ranking: <span className="font-medium text-foreground capitalize">{contest.rankingMethod}</span> attempt
             </p>
-            {attemptNum < contest.maxAttempts ? (
+            {canAttempt ? (
               <Button onClick={startAttempt} size="lg" className="gap-2" disabled={startingAttempt}>
                 {startingAttempt ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
                 {attemptNum === 0 ? 'Start Contest' : 'Start Next Attempt'}
               </Button>
-            ) : (
+            ) : attemptNum >= contest.maxAttempts ? (
               <p className="text-muted-foreground">All attempts used.</p>
+            ) : (
+              <p className="text-muted-foreground">Contest is not currently running.</p>
             )}
           </div>
 
           <div>
             <h3 className="text-lg font-semibold mb-3">Leaderboard</h3>
-            <LeaderboardTable entries={leaderboard} />
+            {leaderboard.length > 0 ? (
+              <LeaderboardTable entries={leaderboard} />
+            ) : (
+              <div className="glass-card p-6 text-center text-muted-foreground">No entries yet. Be the first!</div>
+            )}
           </div>
         </div>
       )}
 
-      {phase === 'typing' && (
+      {phase === 'typing' && passage && (
         <div className="mt-6 space-y-4">
           <MetricsPanel metrics={metrics} />
           <TypingBox
             key={attemptNum}
-            passage={passageText}
+            passage={passage.text}
             duration={contest.duration}
             onComplete={handleComplete}
             onMetricsUpdate={setMetrics}

@@ -14,66 +14,92 @@ export default function TypingBox({ passage, duration, onComplete, onMetricsUpda
   const [started, setStarted] = useState(false);
   const [timeLeft, setTimeLeft] = useState(duration);
   const [finished, setFinished] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const startTimeRef = useRef<number | null>(null);
+  const completedRef = useRef(false);
 
-  const words = passage.split(' ');
-  const typedChars = input.split('');
-
-  const getMetrics = useCallback((): TypingMetrics => {
-    const elapsed = duration - timeLeft;
-    const typedWords = input.trim().split(/\s+/).filter(Boolean).length;
-    const wpm = elapsed > 0 ? Math.round((typedWords / elapsed) * 60) : 0;
+  const getMetrics = useCallback((currentInput: string, currentTimeLeft: number): TypingMetrics => {
+    const elapsed = duration - currentTimeLeft;
+    const minutes = Math.max(elapsed / 60, 0.01);
+    let correctChars = 0;
     let errors = 0;
-    for (let i = 0; i < typedChars.length; i++) {
-      if (typedChars[i] !== passage[i]) errors++;
+    for (let i = 0; i < currentInput.length; i++) {
+      if (currentInput[i] === passage[i]) {
+        correctChars++;
+      } else {
+        errors++;
+      }
     }
-    const accuracy = typedChars.length > 0
-      ? Math.round(((typedChars.length - errors) / typedChars.length) * 1000) / 10
+    const wpm = elapsed > 0 ? Math.round((correctChars / 5) / minutes) : 0;
+    const accuracy = currentInput.length > 0
+      ? Math.round(((correctChars) / currentInput.length) * 1000) / 10
       : 100;
-    const progress = Math.min((input.length / passage.length) * 100, 100);
+    const progress = Math.min((currentInput.length / passage.length) * 100, 100);
     return { wpm, accuracy, errors, elapsed, progress };
-  }, [input, timeLeft, duration, passage, typedChars]);
+  }, [duration, passage]);
 
+  // Timer
   useEffect(() => {
     if (!started || finished) return;
     if (timeLeft <= 0) {
-      setFinished(true);
-      onComplete(getMetrics());
+      if (!completedRef.current) {
+        completedRef.current = true;
+        setFinished(true);
+        onComplete(getMetrics(input, 0));
+      }
       return;
     }
-    const timer = setInterval(() => setTimeLeft(t => t - 1), 1000);
+    const timer = setInterval(() => {
+      setTimeLeft(t => {
+        const next = t - 1;
+        return next;
+      });
+    }, 1000);
     return () => clearInterval(timer);
-  }, [started, timeLeft, finished, getMetrics, onComplete]);
+  }, [started, timeLeft, finished, getMetrics, onComplete, input]);
 
+  // Live metrics update on every change
   useEffect(() => {
     if (started && !finished) {
-      onMetricsUpdate?.(getMetrics());
+      const m = getMetrics(input, timeLeft);
+      onMetricsUpdate?.(m);
     }
   }, [input, timeLeft, started, finished, getMetrics, onMetricsUpdate]);
 
+  // Auto-complete when passage finished
   useEffect(() => {
-    if (input.length >= passage.length && started && !finished) {
+    if (input.length >= passage.length && started && !finished && !completedRef.current) {
+      completedRef.current = true;
       setFinished(true);
-      onComplete(getMetrics());
+      onComplete(getMetrics(input, timeLeft));
     }
-  }, [input, passage, started, finished, getMetrics, onComplete]);
+  }, [input, passage.length, started, finished, getMetrics, onComplete, timeLeft]);
 
-  const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (finished) return;
-    if (!started) setStarted(true);
-    setInput(e.target.value);
+    const val = e.target.value;
+    if (!started) {
+      setStarted(true);
+      startTimeRef.current = Date.now();
+    }
+    // Don't allow typing beyond passage length
+    if (val.length <= passage.length) {
+      setInput(val);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Tab') e.preventDefault();
   };
 
+  const currentMetrics = getMetrics(input, timeLeft);
+
   return (
     <div
       className="glass-card p-6 cursor-text relative"
       onClick={() => inputRef.current?.focus()}
     >
-      <input
+      <textarea
         ref={inputRef}
         value={input}
         onChange={handleInput}
@@ -87,7 +113,7 @@ export default function TypingBox({ passage, duration, onComplete, onMetricsUpda
       <div className="h-1 bg-secondary rounded-full mb-4 overflow-hidden">
         <motion.div
           className="h-full bg-primary rounded-full"
-          animate={{ width: `${getMetrics().progress}%` }}
+          animate={{ width: `${currentMetrics.progress}%` }}
           transition={{ duration: 0.2 }}
         />
       </div>

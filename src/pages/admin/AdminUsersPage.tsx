@@ -4,62 +4,70 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import DataTable from '@/components/admin/DataTable';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
-import { adminUsers, AdminUser } from '@/lib/admin-data';
 import { useApiQuery } from '@/hooks/useApi';
 import apiClient from '@/lib/apiClient';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
+import { Loader2 } from 'lucide-react';
+
+interface UserItem {
+  id: string;
+  username: string;
+  email: string;
+  rating: number;
+  bestWpm: number;
+  totalTests: number;
+  role: string;
+  status: string;
+  createdAt: string;
+}
 
 const statusStyles: Record<string, string> = {
   active: 'bg-success/10 text-success',
   banned: 'bg-destructive/10 text-destructive',
-  inactive: 'bg-muted text-muted-foreground',
 };
 
 export default function AdminUsersPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [banUser, setBanUser] = useState<AdminUser | null>(null);
+  const [banUser, setBanUser] = useState<UserItem | null>(null);
+  const queryClient = useQueryClient();
 
-  // Fetch from API
-  const { data: apiUsers } = useApiQuery<any>(['admin-users'], '/admin/users');
+  const { data: apiUsers, isLoading } = useApiQuery<any>(['admin-users'], '/admin/users');
   const userItems = Array.isArray(apiUsers) ? apiUsers : apiUsers?.users ?? [];
 
-  const users: AdminUser[] = userItems.length
-    ? userItems.map((u: any) => ({
-        id: u._id || u.id,
-        username: u.username,
-        email: u.email,
-        rating: u.rating,
-        bestWpm: u.avgWPM || 0,
-        avgAccuracy: 0,
-        contestsPlayed: u.totalTests || 0,
-        rank: u.role === 'admin' ? 'Admin' : 'User',
-        joinedAt: u.createdAt,
-        totalTests: u.totalTests || 0,
-        status: u.isBanned ? 'banned' : 'active',
-        lastActive: u.updatedAt || u.createdAt,
-      }))
-    : adminUsers;
+  const users: UserItem[] = userItems.map((u: any) => ({
+    id: u._id || u.id,
+    username: u.username,
+    email: u.email,
+    rating: u.rating || 1000,
+    bestWpm: u.avgWPM || 0,
+    totalTests: u.totalTests || 0,
+    role: u.role || 'user',
+    status: u.isBanned ? 'banned' : 'active',
+    createdAt: u.createdAt,
+  }));
 
   const filtered = users
     .filter(u => statusFilter === 'all' || u.status === statusFilter)
     .filter(u => u.username.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()));
 
-  const handleBan = async (user: AdminUser) => {
+  const handleBan = async (user: UserItem) => {
     try {
       await apiClient.patch(`/admin/ban/${user.id}`);
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
       toast.success(user.status === 'banned' ? `${user.username} unbanned` : `${user.username} banned`);
-    } catch {
-      toast.success(user.status === 'banned' ? `${user.username} unbanned` : `${user.username} banned`);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to update user');
     }
     setBanUser(null);
   };
 
   const columns = [
-    { key: 'user', header: 'User', render: (u: AdminUser) => (
+    { key: 'user', header: 'User', render: (u: UserItem) => (
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold text-primary flex-shrink-0">
-          {u.username[0].toUpperCase()}
+          {u.username[0]?.toUpperCase()}
         </div>
         <div>
           <div className="font-medium">{u.username}</div>
@@ -67,18 +75,15 @@ export default function AdminUsersPage() {
         </div>
       </div>
     )},
-    { key: 'rating', header: 'Rating', render: (u: AdminUser) => <span className="font-mono font-bold">{u.rating}</span>, className: 'text-right' },
-    { key: 'rank', header: 'Rank', render: (u: AdminUser) => <Badge variant="outline">{u.rank}</Badge> },
-    { key: 'totalTests', header: 'Tests', render: (u: AdminUser) => <span className="font-mono">{u.totalTests}</span>, className: 'text-right' },
-    { key: 'bestWpm', header: 'Best WPM', render: (u: AdminUser) => <span className="font-mono text-primary">{u.bestWpm}</span>, className: 'text-right' },
-    { key: 'status', header: 'Status', render: (u: AdminUser) => (
+    { key: 'rating', header: 'Rating', render: (u: UserItem) => <span className="font-mono font-bold">{u.rating}</span>, className: 'text-right' },
+    { key: 'role', header: 'Role', render: (u: UserItem) => <Badge variant="outline" className="capitalize">{u.role}</Badge> },
+    { key: 'totalTests', header: 'Tests', render: (u: UserItem) => <span className="font-mono">{u.totalTests}</span>, className: 'text-right' },
+    { key: 'bestWpm', header: 'Avg WPM', render: (u: UserItem) => <span className="font-mono text-primary">{u.bestWpm}</span>, className: 'text-right' },
+    { key: 'status', header: 'Status', render: (u: UserItem) => (
       <Badge variant="outline" className={`capitalize ${statusStyles[u.status] || ''}`}>{u.status}</Badge>
     )},
-    { key: 'actions', header: '', render: (u: AdminUser) => (
+    { key: 'actions', header: '', render: (u: UserItem) => (
       <div className="flex items-center gap-1 justify-end">
-        <button className="w-8 h-8 rounded-lg hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
-          <Eye className="w-4 h-4" />
-        </button>
         <button
           onClick={() => setBanUser(u)}
           className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
@@ -106,7 +111,7 @@ export default function AdminUsersPage() {
           <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by username or email..." className="pl-10" />
         </div>
         <div className="flex gap-1">
-          {['all', 'active', 'inactive', 'banned'].map(f => (
+          {['all', 'active', 'banned'].map(f => (
             <button
               key={f}
               onClick={() => setStatusFilter(f)}
@@ -120,7 +125,11 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      <DataTable columns={columns} data={filtered} keyExtractor={u => u.id} />
+      {isLoading ? (
+        <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+      ) : (
+        <DataTable columns={columns} data={filtered} keyExtractor={u => u.id} />
+      )}
 
       {banUser && (
         <ConfirmDialog
