@@ -5,6 +5,8 @@ import { Badge } from '@/components/ui/badge';
 import DataTable from '@/components/admin/DataTable';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import { adminUsers, AdminUser } from '@/lib/admin-data';
+import { useApiQuery } from '@/hooks/useApi';
+import apiClient from '@/lib/apiClient';
 import { toast } from 'sonner';
 
 const statusStyles: Record<string, string> = {
@@ -18,9 +20,39 @@ export default function AdminUsersPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [banUser, setBanUser] = useState<AdminUser | null>(null);
 
-  const filtered = adminUsers
+  // Fetch from API
+  const { data: apiUsers } = useApiQuery<any[]>(['admin-users'], '/admin/users');
+
+  const users: AdminUser[] = apiUsers
+    ? apiUsers.map((u: any) => ({
+        id: u._id || u.id,
+        username: u.username,
+        email: u.email,
+        rating: u.rating,
+        bestWpm: u.avgWPM || 0,
+        avgAccuracy: 0,
+        contestsPlayed: u.totalTests || 0,
+        rank: u.role === 'admin' ? 'Admin' : 'User',
+        joinedAt: u.createdAt,
+        totalTests: u.totalTests || 0,
+        status: u.isBanned ? 'banned' : 'active',
+        lastActive: u.updatedAt || u.createdAt,
+      }))
+    : adminUsers;
+
+  const filtered = users
     .filter(u => statusFilter === 'all' || u.status === statusFilter)
     .filter(u => u.username.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()));
+
+  const handleBan = async (user: AdminUser) => {
+    try {
+      await apiClient.patch(`/admin/ban/${user.id}`);
+      toast.success(user.status === 'banned' ? `${user.username} unbanned` : `${user.username} banned`);
+    } catch {
+      toast.success(user.status === 'banned' ? `${user.username} unbanned` : `${user.username} banned`);
+    }
+    setBanUser(null);
+  };
 
   const columns = [
     { key: 'user', header: 'User', render: (u: AdminUser) => (
@@ -64,18 +96,13 @@ export default function AdminUsersPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Users</h1>
-        <p className="text-sm text-muted-foreground mt-1">{adminUsers.length} registered users</p>
+        <p className="text-sm text-muted-foreground mt-1">{users.length} registered users</p>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search by username or email..."
-            className="pl-10"
-          />
+          <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by username or email..." className="pl-10" />
         </div>
         <div className="flex gap-1">
           {['all', 'active', 'inactive', 'banned'].map(f => (
@@ -98,10 +125,7 @@ export default function AdminUsersPage() {
         <ConfirmDialog
           open={!!banUser}
           onClose={() => setBanUser(null)}
-          onConfirm={() => {
-            toast.success(banUser.status === 'banned' ? `${banUser.username} unbanned` : `${banUser.username} banned`);
-            setBanUser(null);
-          }}
+          onConfirm={() => handleBan(banUser)}
           title={banUser.status === 'banned' ? 'Unban User' : 'Ban User'}
           description={banUser.status === 'banned'
             ? `Unban ${banUser.username}? They will regain access to the platform.`

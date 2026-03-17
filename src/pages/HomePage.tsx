@@ -5,6 +5,9 @@ import { Button } from '@/components/ui/button';
 import { mockContests, mockLeaderboard } from '@/lib/mock-data';
 import ContestCard from '@/components/ContestCard';
 import LeaderboardTable from '@/components/LeaderboardTable';
+import { useAuth } from '@/contexts/AuthContext';
+import { useApiQuery } from '@/hooks/useApi';
+import { Contest, LeaderboardEntry } from '@/lib/types';
 
 const features = [
   { icon: Keyboard, title: 'Practice Mode', desc: 'Sharpen your skills with custom difficulty and time limits.' },
@@ -14,6 +17,25 @@ const features = [
 ];
 
 export default function HomePage() {
+  const { isAuthenticated } = useAuth();
+
+  const { data: apiContests } = useApiQuery<any[]>(['home-contests'], '/contests');
+
+  const contests: Contest[] = apiContests
+    ? apiContests.map((c: any) => ({
+        id: c._id || c.id,
+        title: c.title,
+        difficulty: c.difficulty,
+        duration: c.duration,
+        startTime: c.startTime,
+        participants: c.participantsCount || 0,
+        maxAttempts: c.maxAttempts,
+        status: c.status === 'running' ? 'live' : c.status,
+        rankingMethod: c.rankingMethod,
+        passageCount: c.passagePool?.length || 0,
+      }))
+    : mockContests;
+
   return (
     <div>
       {/* Hero */}
@@ -56,7 +78,6 @@ export default function HomePage() {
               </Button>
             </div>
 
-            {/* Typing demo */}
             <div className="mt-12 glass-card p-6 max-w-lg mx-auto text-left">
               <div className="font-mono text-sm text-muted-foreground mb-2">Try it:</div>
               <div className="font-mono text-lg overflow-hidden">
@@ -78,7 +99,7 @@ export default function HomePage() {
           </Link>
         </div>
         <div className="grid md:grid-cols-2 gap-4">
-          {mockContests.filter(c => c.status !== 'ended').slice(0, 4).map((contest) => (
+          {contests.filter(c => c.status !== 'ended').slice(0, 4).map((contest) => (
             <ContestCard key={contest.id} contest={contest} />
           ))}
         </div>
@@ -126,7 +147,9 @@ export default function HomePage() {
             Join TypeArena and start climbing the rankings today.
           </p>
           <Button asChild size="lg">
-            <Link to="/register">Create Free Account</Link>
+            <Link to={isAuthenticated ? '/contest' : '/register'}>
+              {isAuthenticated ? 'Join a Contest' : 'Create Free Account'}
+            </Link>
           </Button>
         </div>
       </section>

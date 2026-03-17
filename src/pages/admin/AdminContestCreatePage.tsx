@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import apiClient from '@/lib/apiClient';
 import { toast } from 'sonner';
 
 export default function AdminContestCreatePage() {
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     title: '',
     difficulty: 'medium',
@@ -15,16 +17,27 @@ export default function AdminContestCreatePage() {
     duration: 60,
     maxAttempts: 3,
     rankingMethod: 'best',
-    randomPassageMode: true,
+    randomPassage: true,
     maxParticipants: 200,
   });
 
   const update = (key: string, value: unknown) => setForm(f => ({ ...f, [key]: value }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast.success('Contest created successfully!');
-    navigate('/admin/contests');
+    setLoading(true);
+    try {
+      await apiClient.post('/contests', {
+        ...form,
+        startTime: new Date(form.startTime).toISOString(),
+      });
+      toast.success('Contest created successfully!');
+      navigate('/admin/contests');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to create contest');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -38,12 +51,10 @@ export default function AdminContestCreatePage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="glass-card p-6 space-y-5">
           <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Basic Info</h2>
-
           <div>
             <label className="text-sm font-medium mb-1.5 block">Contest Title</label>
             <Input value={form.title} onChange={e => update('title', e.target.value)} placeholder="Speed Sprint #43" required />
           </div>
-
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium mb-1.5 block">Difficulty</label>
@@ -66,7 +77,6 @@ export default function AdminContestCreatePage() {
 
         <div className="glass-card p-6 space-y-5">
           <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Contest Rules</h2>
-
           <div className="grid sm:grid-cols-3 gap-4">
             <div>
               <label className="text-sm font-medium mb-1.5 block">Duration (seconds)</label>
@@ -81,7 +91,6 @@ export default function AdminContestCreatePage() {
               <Input type="number" min={2} value={form.maxParticipants} onChange={e => update('maxParticipants', +e.target.value)} />
             </div>
           </div>
-
           <div>
             <label className="text-sm font-medium mb-1.5 block">Ranking Method</label>
             <div className="flex gap-2">
@@ -99,19 +108,21 @@ export default function AdminContestCreatePage() {
               ))}
             </div>
           </div>
-
           <div className="flex items-center justify-between py-2">
             <div>
               <div className="text-sm font-medium">Random Passage Mode</div>
               <div className="text-xs text-muted-foreground">Each attempt gets a random passage from the pool</div>
             </div>
-            <Switch checked={form.randomPassageMode} onCheckedChange={v => update('randomPassageMode', v)} />
+            <Switch checked={form.randomPassage} onCheckedChange={v => update('randomPassage', v)} />
           </div>
         </div>
 
         <div className="flex gap-3 justify-end">
           <Button variant="outline" type="button" onClick={() => navigate('/admin/contests')}>Cancel</Button>
-          <Button type="submit">Create Contest</Button>
+          <Button type="submit" disabled={loading}>
+            {loading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+            Create Contest
+          </Button>
         </div>
       </form>
     </div>

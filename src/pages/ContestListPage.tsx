@@ -1,15 +1,39 @@
 import ContestCard from '@/components/ContestCard';
-import { mockContests } from '@/lib/mock-data';
 import { useState } from 'react';
+import { useApiQuery } from '@/hooks/useApi';
+import { Contest } from '@/lib/types';
+import { mockContests } from '@/lib/mock-data';
+import { Loader2 } from 'lucide-react';
 
 const filters = ['all', 'live', 'upcoming', 'ended'] as const;
 
 export default function ContestListPage() {
   const [filter, setFilter] = useState<string>('all');
 
+  const { data: apiContests, isLoading, isError } = useApiQuery<any[]>(
+    ['contests'],
+    '/contests',
+  );
+
+  // Map API data or fall back to mock
+  const contests: Contest[] = apiContests
+    ? apiContests.map((c: any) => ({
+        id: c._id || c.id,
+        title: c.title,
+        difficulty: c.difficulty,
+        duration: c.duration,
+        startTime: c.startTime,
+        participants: c.participantsCount || 0,
+        maxAttempts: c.maxAttempts,
+        status: c.status === 'running' ? 'live' : c.status,
+        rankingMethod: c.rankingMethod,
+        passageCount: c.passagePool?.length || 0,
+      }))
+    : mockContests;
+
   const filtered = filter === 'all'
-    ? mockContests
-    : mockContests.filter(c => c.status === filter);
+    ? contests
+    : contests.filter(c => c.status === filter);
 
   return (
     <div className="page-container">
@@ -29,13 +53,21 @@ export default function ContestListPage() {
         ))}
       </div>
 
-      <div className="grid md:grid-cols-2 gap-4">
-        {filtered.map(c => (
-          <ContestCard key={c.id} contest={c} />
-        ))}
-      </div>
+      {isLoading && (
+        <div className="flex justify-center py-16">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      )}
 
-      {filtered.length === 0 && (
+      {!isLoading && (
+        <div className="grid md:grid-cols-2 gap-4">
+          {filtered.map(c => (
+            <ContestCard key={c.id} contest={c} />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && filtered.length === 0 && (
         <div className="text-center py-16 text-muted-foreground">No contests found.</div>
       )}
     </div>

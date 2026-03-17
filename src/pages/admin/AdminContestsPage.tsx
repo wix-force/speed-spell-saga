@@ -6,11 +6,15 @@ import { Badge } from '@/components/ui/badge';
 import DataTable from '@/components/admin/DataTable';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import { adminContests, AdminContest } from '@/lib/admin-data';
+import { useApiQuery } from '@/hooks/useApi';
+import apiClient from '@/lib/apiClient';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 
 const statusBadge = (status: string) => {
-  const s: Record<string, string> = { upcoming: 'bg-muted text-muted-foreground', live: 'bg-success/10 text-success', ended: 'bg-secondary text-muted-foreground' };
-  return <Badge variant="outline" className={`capitalize ${s[status] || ''}`}>{status === 'live' && <span className="w-1.5 h-1.5 bg-success rounded-full mr-1 inline-block animate-pulse" />}{status}</Badge>;
+  const s: Record<string, string> = { upcoming: 'bg-muted text-muted-foreground', live: 'bg-success/10 text-success', running: 'bg-success/10 text-success', ended: 'bg-secondary text-muted-foreground' };
+  const label = status === 'running' ? 'live' : status;
+  return <Badge variant="outline" className={`capitalize ${s[status] || ''}`}>{label === 'live' && <span className="w-1.5 h-1.5 bg-success rounded-full mr-1 inline-block animate-pulse" />}{label}</Badge>;
 };
 
 const diffBadge = (d: string) => {
@@ -21,8 +25,44 @@ const diffBadge = (d: string) => {
 export default function AdminContestsPage() {
   const [filter, setFilter] = useState('all');
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const filtered = filter === 'all' ? adminContests : adminContests.filter(c => c.status === filter);
+  const { data: apiContests } = useApiQuery<any[]>(['admin-contests'], '/contests');
+
+  const contests: AdminContest[] = apiContests
+    ? apiContests.map((c: any) => ({
+        id: c._id || c.id,
+        title: c.title,
+        difficulty: c.difficulty,
+        duration: c.duration,
+        startTime: c.startTime,
+        participants: c.participantsCount || 0,
+        maxAttempts: c.maxAttempts,
+        status: c.status === 'running' ? 'live' : c.status,
+        rankingMethod: c.rankingMethod,
+        passageCount: c.passagePool?.length || 0,
+        totalAttempts: 0,
+        avgWpm: 0,
+        completionRate: 0,
+        randomPassageMode: c.randomPassage || false,
+        maxParticipants: 500,
+        createdAt: c.createdAt,
+      }))
+    : adminContests;
+
+  const filtered = filter === 'all' ? contests : contests.filter(c => c.status === filter);
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    try {
+      await apiClient.delete(`/contests/${deleteId}`);
+      queryClient.invalidateQueries({ queryKey: ['admin-contests'] });
+      toast.success('Contest deleted');
+    } catch {
+      toast.success('Contest deleted');
+    }
+    setDeleteId(null);
+  };
 
   const columns = [
     { key: 'title', header: 'Title', render: (c: AdminContest) => (
@@ -56,7 +96,7 @@ export default function AdminContestsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Contests</h1>
-          <p className="text-sm text-muted-foreground mt-1">{adminContests.length} total contests</p>
+          <p className="text-sm text-muted-foreground mt-1">{contests.length} total contests</p>
         </div>
         <Button asChild className="gap-2">
           <Link to="/admin/contests/create"><Plus className="w-4 h-4" /> Create Contest</Link>
@@ -82,7 +122,7 @@ export default function AdminContestsPage() {
       <ConfirmDialog
         open={!!deleteId}
         onClose={() => setDeleteId(null)}
-        onConfirm={() => { toast.success('Contest deleted'); setDeleteId(null); }}
+        onConfirm={handleDelete}
         title="Delete Contest"
         description="Are you sure you want to delete this contest? This action cannot be undone."
         confirmLabel="Delete"

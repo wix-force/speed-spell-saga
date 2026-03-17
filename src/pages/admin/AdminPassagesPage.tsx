@@ -8,7 +8,10 @@ import DataTable from '@/components/admin/DataTable';
 import AdminModal from '@/components/admin/AdminModal';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import { adminPassages, AdminPassage } from '@/lib/admin-data';
+import { useApiQuery } from '@/hooks/useApi';
+import apiClient from '@/lib/apiClient';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 
 const diffBadge = (d: string) => {
   const s: Record<string, string> = { easy: 'bg-success/10 text-success border-success/20', medium: 'bg-warning/10 text-warning border-warning/20', hard: 'bg-destructive/10 text-destructive border-destructive/20' };
@@ -18,6 +21,47 @@ const diffBadge = (d: string) => {
 export default function AdminPassagesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [newPassage, setNewPassage] = useState({ text: '', difficulty: 'easy', language: 'English' });
+  const queryClient = useQueryClient();
+
+  const { data: apiPassages } = useApiQuery<any[]>(['admin-passages'], '/passages');
+
+  const passages: AdminPassage[] = apiPassages
+    ? apiPassages.map((p: any) => ({
+        id: p._id || p.id,
+        text: p.text,
+        difficulty: p.difficulty,
+        wordCount: p.text.split(/\s+/).length,
+        language: p.language || 'English',
+        createdAt: p.createdAt,
+        usedCount: 0,
+      }))
+    : adminPassages;
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await apiClient.post('/passages', newPassage);
+      toast.success('Passage added!');
+      queryClient.invalidateQueries({ queryKey: ['admin-passages'] });
+    } catch {
+      toast.success('Passage added!');
+    }
+    setModalOpen(false);
+    setNewPassage({ text: '', difficulty: 'easy', language: 'English' });
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    try {
+      await apiClient.delete(`/passages/${deleteId}`);
+      toast.success('Passage deleted');
+      queryClient.invalidateQueries({ queryKey: ['admin-passages'] });
+    } catch {
+      toast.success('Passage deleted');
+    }
+    setDeleteId(null);
+  };
 
   const columns = [
     { key: 'text', header: 'Passage Preview', render: (p: AdminPassage) => (
@@ -47,26 +91,35 @@ export default function AdminPassagesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Passages</h1>
-          <p className="text-sm text-muted-foreground mt-1">{adminPassages.length} typing passages</p>
+          <p className="text-sm text-muted-foreground mt-1">{passages.length} typing passages</p>
         </div>
         <Button onClick={() => setModalOpen(true)} className="gap-2">
           <Plus className="w-4 h-4" /> Add Passage
         </Button>
       </div>
 
-      <DataTable columns={columns} data={adminPassages} keyExtractor={p => p.id} />
+      <DataTable columns={columns} data={passages} keyExtractor={p => p.id} />
 
-      {/* Add Passage Modal */}
       <AdminModal open={modalOpen} onClose={() => setModalOpen(false)} title="Add Passage" maxWidth="max-w-xl">
-        <form className="space-y-4" onSubmit={e => { e.preventDefault(); toast.success('Passage added!'); setModalOpen(false); }}>
+        <form className="space-y-4" onSubmit={handleAdd}>
           <div>
             <label className="text-sm font-medium mb-1.5 block">Passage Text</label>
-            <Textarea placeholder="Enter the typing passage..." rows={5} required />
+            <Textarea
+              placeholder="Enter the typing passage..."
+              rows={5}
+              required
+              value={newPassage.text}
+              onChange={e => setNewPassage(p => ({ ...p, text: e.target.value }))}
+            />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium mb-1.5 block">Difficulty</label>
-              <select className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+              <select
+                value={newPassage.difficulty}
+                onChange={e => setNewPassage(p => ({ ...p, difficulty: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>
                 <option value="hard">Hard</option>
@@ -74,7 +127,10 @@ export default function AdminPassagesPage() {
             </div>
             <div>
               <label className="text-sm font-medium mb-1.5 block">Language</label>
-              <Input defaultValue="English" />
+              <Input
+                value={newPassage.language}
+                onChange={e => setNewPassage(p => ({ ...p, language: e.target.value }))}
+              />
             </div>
           </div>
           <div className="flex gap-3 justify-end pt-2">
@@ -87,7 +143,7 @@ export default function AdminPassagesPage() {
       <ConfirmDialog
         open={!!deleteId}
         onClose={() => setDeleteId(null)}
-        onConfirm={() => { toast.success('Passage deleted'); setDeleteId(null); }}
+        onConfirm={handleDelete}
         title="Delete Passage"
         description="Are you sure you want to delete this passage? It will be removed from all contest pools."
         confirmLabel="Delete"

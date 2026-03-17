@@ -1,21 +1,21 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Keyboard, Trophy, User, BarChart3, Menu, X } from 'lucide-react';
+import { Keyboard, Trophy, User, BarChart3, Menu, X, Shield, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-
-import { Shield } from 'lucide-react';
-
-const navItems = [
-  { to: '/practice', label: 'Practice', icon: Keyboard },
-  { to: '/contest', label: 'Contests', icon: Trophy },
-  { to: '/leaderboard', label: 'Leaderboard', icon: BarChart3 },
-  { to: '/profile', label: 'Profile', icon: User },
-  { to: '/admin', label: 'Admin', icon: Shield },
-];
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Navbar() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { isAuthenticated, isAdmin, user, logout } = useAuth();
+
+  const navItems = [
+    { to: '/practice', label: 'Practice', icon: Keyboard },
+    { to: '/contest', label: 'Contests', icon: Trophy },
+    { to: '/leaderboard', label: 'Leaderboard', icon: BarChart3 },
+    ...(isAuthenticated ? [{ to: '/profile', label: 'Profile', icon: User }] : []),
+    ...(isAdmin ? [{ to: '/admin', label: 'Admin', icon: Shield }] : []),
+  ];
 
   return (
     <nav className="sticky top-0 z-50 glass-card border-b border-border/50 rounded-none">
@@ -32,7 +32,7 @@ export default function Navbar() {
 
           <div className="hidden md:flex items-center gap-1">
             {navItems.map((item) => {
-              const active = location.pathname === item.to;
+              const active = location.pathname === item.to || (item.to !== '/' && location.pathname.startsWith(item.to));
               return (
                 <Link
                   key={item.to}
@@ -51,18 +51,33 @@ export default function Navbar() {
           </div>
 
           <div className="hidden md:flex items-center gap-3">
-            <Link
-              to="/login"
-              className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Log in
-            </Link>
-            <Link
-              to="/register"
-              className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity"
-            >
-              Sign up
-            </Link>
+            {isAuthenticated ? (
+              <>
+                <span className="text-sm text-muted-foreground">{user?.username}</span>
+                <button
+                  onClick={logout}
+                  className="flex items-center gap-1 px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  to="/login"
+                  className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Log in
+                </Link>
+                <Link
+                  to="/register"
+                  className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity"
+                >
+                  Sign up
+                </Link>
+              </>
+            )}
           </div>
 
           <button
@@ -99,12 +114,20 @@ export default function Navbar() {
                 </Link>
               ))}
               <div className="pt-2 border-t border-border/50 flex gap-2">
-                <Link to="/login" onClick={() => setMobileOpen(false)} className="flex-1 text-center py-2 text-sm text-muted-foreground">
-                  Log in
-                </Link>
-                <Link to="/register" onClick={() => setMobileOpen(false)} className="flex-1 text-center py-2 text-sm bg-primary text-primary-foreground rounded-lg">
-                  Sign up
-                </Link>
+                {isAuthenticated ? (
+                  <button onClick={() => { logout(); setMobileOpen(false); }} className="flex-1 text-center py-2 text-sm text-muted-foreground">
+                    Logout
+                  </button>
+                ) : (
+                  <>
+                    <Link to="/login" onClick={() => setMobileOpen(false)} className="flex-1 text-center py-2 text-sm text-muted-foreground">
+                      Log in
+                    </Link>
+                    <Link to="/register" onClick={() => setMobileOpen(false)} className="flex-1 text-center py-2 text-sm bg-primary text-primary-foreground rounded-lg">
+                      Sign up
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           </motion.div>
