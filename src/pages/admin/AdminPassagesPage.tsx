@@ -7,11 +7,20 @@ import { Badge } from '@/components/ui/badge';
 import DataTable from '@/components/admin/DataTable';
 import AdminModal from '@/components/admin/AdminModal';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
-import { adminPassages, AdminPassage } from '@/lib/admin-data';
 import { useApiQuery } from '@/hooks/useApi';
 import apiClient from '@/lib/apiClient';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
+import { Loader2 } from 'lucide-react';
+
+interface PassageItem {
+  id: string;
+  text: string;
+  difficulty: string;
+  language: string;
+  wordCount: number;
+  createdAt: string;
+}
 
 const diffBadge = (d: string) => {
   const s: Record<string, string> = { easy: 'bg-success/10 text-success border-success/20', medium: 'bg-warning/10 text-warning border-warning/20', hard: 'bg-destructive/10 text-destructive border-destructive/20' };
@@ -20,36 +29,54 @@ const diffBadge = (d: string) => {
 
 export default function AdminPassagesPage() {
   const [modalOpen, setModalOpen] = useState(false);
+  const [editPassage, setEditPassage] = useState<PassageItem | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [newPassage, setNewPassage] = useState({ text: '', difficulty: 'easy', language: 'English' });
+  const [form, setForm] = useState({ text: '', difficulty: 'easy', language: 'English' });
+  const [saving, setSaving] = useState(false);
   const queryClient = useQueryClient();
 
-  const { data: apiPassages } = useApiQuery<any>(['admin-passages'], '/passages');
+  const { data: apiPassages, isLoading } = useApiQuery<any>(['admin-passages'], '/passages');
   const passageItems = Array.isArray(apiPassages) ? apiPassages : apiPassages?.passages ?? [];
 
-  const passages: AdminPassage[] = passageItems.length
-    ? passageItems.map((p: any) => ({
-        id: p._id || p.id,
-        text: p.text,
-        difficulty: p.difficulty,
-        wordCount: p.text.split(/\s+/).length,
-        language: p.language || 'English',
-        createdAt: p.createdAt,
-        usedCount: 0,
-      }))
-    : adminPassages;
+  const passages: PassageItem[] = passageItems.map((p: any) => ({
+    id: p._id || p.id,
+    text: p.text,
+    difficulty: p.difficulty,
+    language: p.language || 'English',
+    wordCount: p.text?.split(/\s+/).length || 0,
+    createdAt: p.createdAt,
+  }));
 
-  const handleAdd = async (e: React.FormEvent) => {
+  const openAdd = () => {
+    setEditPassage(null);
+    setForm({ text: '', difficulty: 'easy', language: 'English' });
+    setModalOpen(true);
+  };
+
+  const openEdit = (p: PassageItem) => {
+    setEditPassage(p);
+    setForm({ text: p.text, difficulty: p.difficulty, language: p.language });
+    setModalOpen(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSaving(true);
     try {
-      await apiClient.post('/passages', newPassage);
-      toast.success('Passage added!');
+      if (editPassage) {
+        await apiClient.patch(`/passages/${editPassage.id}`, form);
+        toast.success('Passage updated');
+      } else {
+        await apiClient.post('/passages', form);
+        toast.success('Passage added');
+      }
       queryClient.invalidateQueries({ queryKey: ['admin-passages'] });
-    } catch {
-      toast.success('Passage added!');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to save passage');
+    } finally {
+      setSaving(false);
+      setModalOpen(false);
     }
-    setModalOpen(false);
-    setNewPassage({ text: '', difficulty: 'easy', language: 'English' });
   };
 
   const handleDelete = async () => {
@@ -58,26 +85,25 @@ export default function AdminPassagesPage() {
       await apiClient.delete(`/passages/${deleteId}`);
       toast.success('Passage deleted');
       queryClient.invalidateQueries({ queryKey: ['admin-passages'] });
-    } catch {
-      toast.success('Passage deleted');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to delete');
     }
     setDeleteId(null);
   };
 
   const columns = [
-    { key: 'text', header: 'Passage Preview', render: (p: AdminPassage) => (
+    { key: 'text', header: 'Passage Preview', render: (p: PassageItem) => (
       <span className="text-sm text-muted-foreground line-clamp-1 max-w-xs">{p.text}</span>
     )},
-    { key: 'difficulty', header: 'Difficulty', render: (p: AdminPassage) => diffBadge(p.difficulty) },
-    { key: 'language', header: 'Language', render: (p: AdminPassage) => <span>{p.language}</span> },
-    { key: 'wordCount', header: 'Words', render: (p: AdminPassage) => <span className="font-mono">{p.wordCount}</span>, className: 'text-center' },
-    { key: 'usedCount', header: 'Used', render: (p: AdminPassage) => <span className="font-mono text-muted-foreground">{p.usedCount}×</span>, className: 'text-center' },
-    { key: 'createdAt', header: 'Created', render: (p: AdminPassage) => (
-      <span className="text-xs text-muted-foreground">{new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+    { key: 'difficulty', header: 'Difficulty', render: (p: PassageItem) => diffBadge(p.difficulty) },
+    { key: 'language', header: 'Language', render: (p: PassageItem) => <span>{p.language}</span> },
+    { key: 'wordCount', header: 'Words', render: (p: PassageItem) => <span className="font-mono">{p.wordCount}</span>, className: 'text-center' },
+    { key: 'createdAt', header: 'Created', render: (p: PassageItem) => (
+      <span className="text-xs text-muted-foreground">{p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
     )},
-    { key: 'actions', header: '', render: (p: AdminPassage) => (
+    { key: 'actions', header: '', render: (p: PassageItem) => (
       <div className="flex items-center gap-1 justify-end">
-        <button className="w-8 h-8 rounded-lg hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={() => openEdit(p)} className="w-8 h-8 rounded-lg hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
           <Edit2 className="w-4 h-4" />
         </button>
         <button onClick={() => setDeleteId(p.id)} className="w-8 h-8 rounded-lg hover:bg-destructive/10 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors">
@@ -94,31 +120,35 @@ export default function AdminPassagesPage() {
           <h1 className="text-2xl font-bold">Passages</h1>
           <p className="text-sm text-muted-foreground mt-1">{passages.length} typing passages</p>
         </div>
-        <Button onClick={() => setModalOpen(true)} className="gap-2">
+        <Button onClick={openAdd} className="gap-2">
           <Plus className="w-4 h-4" /> Add Passage
         </Button>
       </div>
 
-      <DataTable columns={columns} data={passages} keyExtractor={p => p.id} />
+      {isLoading ? (
+        <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+      ) : (
+        <DataTable columns={columns} data={passages} keyExtractor={p => p.id} />
+      )}
 
-      <AdminModal open={modalOpen} onClose={() => setModalOpen(false)} title="Add Passage" maxWidth="max-w-xl">
-        <form className="space-y-4" onSubmit={handleAdd}>
+      <AdminModal open={modalOpen} onClose={() => setModalOpen(false)} title={editPassage ? 'Edit Passage' : 'Add Passage'} maxWidth="max-w-xl">
+        <form className="space-y-4" onSubmit={handleSave}>
           <div>
             <label className="text-sm font-medium mb-1.5 block">Passage Text</label>
             <Textarea
               placeholder="Enter the typing passage..."
               rows={5}
               required
-              value={newPassage.text}
-              onChange={e => setNewPassage(p => ({ ...p, text: e.target.value }))}
+              value={form.text}
+              onChange={e => setForm(f => ({ ...f, text: e.target.value }))}
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium mb-1.5 block">Difficulty</label>
               <select
-                value={newPassage.difficulty}
-                onChange={e => setNewPassage(p => ({ ...p, difficulty: e.target.value }))}
+                value={form.difficulty}
+                onChange={e => setForm(f => ({ ...f, difficulty: e.target.value }))}
                 className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="easy">Easy</option>
@@ -129,14 +159,17 @@ export default function AdminPassagesPage() {
             <div>
               <label className="text-sm font-medium mb-1.5 block">Language</label>
               <Input
-                value={newPassage.language}
-                onChange={e => setNewPassage(p => ({ ...p, language: e.target.value }))}
+                value={form.language}
+                onChange={e => setForm(f => ({ ...f, language: e.target.value }))}
               />
             </div>
           </div>
           <div className="flex gap-3 justify-end pt-2">
             <Button variant="outline" type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button type="submit">Add Passage</Button>
+            <Button type="submit" disabled={saving}>
+              {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              {editPassage ? 'Update' : 'Add'} Passage
+            </Button>
           </div>
         </form>
       </AdminModal>
