@@ -21,10 +21,11 @@ export default function AdminUsersPage() {
   const [banUser, setBanUser] = useState<AdminUser | null>(null);
 
   // Fetch from API
-  const { data: apiUsers } = useApiQuery<any[]>(['admin-users'], '/admin/users');
+  const { data: apiUsers } = useApiQuery<any>(['admin-users'], '/admin/users');
+  const userItems = Array.isArray(apiUsers) ? apiUsers : apiUsers?.users ?? [];
 
-  const users: AdminUser[] = apiUsers
-    ? apiUsers.map((u: any) => ({
+  const users: AdminUser[] = userItems.length
+    ? userItems.map((u: any) => ({
         id: u._id || u.id,
         username: u.username,
         email: u.email,

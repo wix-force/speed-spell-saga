@@ -19,10 +19,11 @@ const features = [
 export default function HomePage() {
   const { isAuthenticated } = useAuth();
 
-  const { data: apiContests } = useApiQuery<any[]>(['home-contests'], '/contests');
+  const { data: apiContests } = useApiQuery<any>(['home-contests'], '/contests');
+  const contestItems = Array.isArray(apiContests) ? apiContests : apiContests?.contests ?? [];
 
-  const contests: Contest[] = apiContests
-    ? apiContests.map((c: any) => ({
+  const contests: Contest[] = contestItems.length
+    ? contestItems.map((c: any) => ({
         id: c._id || c.id,
         title: c.title,
         difficulty: c.difficulty,

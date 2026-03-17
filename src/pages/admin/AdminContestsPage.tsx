@@ -27,10 +27,11 @@ export default function AdminContestsPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
-  const { data: apiContests } = useApiQuery<any[]>(['admin-contests'], '/contests');
+  const { data: apiContests } = useApiQuery<any>(['admin-contests'], '/contests');
+  const contestItems = Array.isArray(apiContests) ? apiContests : apiContests?.contests ?? [];
 
-  const contests: AdminContest[] = apiContests
-    ? apiContests.map((c: any) => ({
+  const contests: AdminContest[] = contestItems.length
+    ? contestItems.map((c: any) => ({
         id: c._id || c.id,
         title: c.title,
         difficulty: c.difficulty,

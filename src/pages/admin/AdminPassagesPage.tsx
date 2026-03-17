@@ -24,10 +24,11 @@ export default function AdminPassagesPage() {
   const [newPassage, setNewPassage] = useState({ text: '', difficulty: 'easy', language: 'English' });
   const queryClient = useQueryClient();
 
-  const { data: apiPassages } = useApiQuery<any[]>(['admin-passages'], '/passages');
+  const { data: apiPassages } = useApiQuery<any>(['admin-passages'], '/passages');
+  const passageItems = Array.isArray(apiPassages) ? apiPassages : apiPassages?.passages ?? [];
 
-  const passages: AdminPassage[] = apiPassages
-    ? apiPassages.map((p: any) => ({
+  const passages: AdminPassage[] = passageItems.length
+    ? passageItems.map((p: any) => ({
         id: p._id || p.id,
         text: p.text,
         difficulty: p.difficulty,

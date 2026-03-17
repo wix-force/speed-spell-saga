@@ -10,14 +10,15 @@ const filters = ['all', 'live', 'upcoming', 'ended'] as const;
 export default function ContestListPage() {
   const [filter, setFilter] = useState<string>('all');
 
-  const { data: apiContests, isLoading, isError } = useApiQuery<any[]>(
+  const { data: apiContests, isLoading, isError } = useApiQuery<any>(
     ['contests'],
     '/contests',
   );
+  const contestItems = Array.isArray(apiContests) ? apiContests : apiContests?.contests ?? [];
 
   // Map API data or fall back to mock
-  const contests: Contest[] = apiContests
-    ? apiContests.map((c: any) => ({
+  const contests: Contest[] = contestItems.length
+    ? contestItems.map((c: any) => ({
         id: c._id || c.id,
         title: c.title,
         difficulty: c.difficulty,
