@@ -69,7 +69,7 @@ export default function ProfilePage() {
           <div key={a._id || a.id} className="glass-card p-4 flex items-center justify-between">
             <div>
               <div className="font-medium">Attempt #{a.attemptNumber}</div>
-              <div className="text-xs text-muted-foreground">Contest: {a.contestId}</div>
+              <div className="text-xs text-muted-foreground">Contest: {a.contestId?.title || a.contestId}</div>
             </div>
             <div className="flex gap-6 text-sm">
               <div><span className="text-muted-foreground">WPM: </span><span className="font-mono font-bold text-primary">{a.wpm}</span></div>

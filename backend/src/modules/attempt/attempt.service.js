@@ -20,12 +20,8 @@ exports.start = async (userId, contestId) => {
   const available = contest.passagePool.filter(p => !usedPassageIds.includes(p._id.toString()));
   if (available.length === 0) throw new AppError('No more passages available', 400);
 
-  let passage;
-  if (contest.randomPassage) {
-    passage = available[Math.floor(Math.random() * available.length)];
-  } else {
-    passage = available[0];
-  }
+  // Admin controls the contest pool order; each attempt gets the next unused passage.
+  const passage = available[0];
 
   const attempt = await Attempt.create({
     userId,
@@ -60,4 +56,12 @@ exports.submit = async (userId, { attemptId, correctChars, totalTyped, errors })
 
 exports.getUserAttempts = async (userId, contestId) => {
   return Attempt.find({ userId, contestId }).sort({ attemptNumber: 1 }).populate('passageId', 'text difficulty');
+};
+
+exports.getRecentAttempts = async (userId, limit = 10) => {
+  return Attempt.find({ userId })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .populate('contestId', 'title')
+    .populate('passageId', 'text difficulty');
 };

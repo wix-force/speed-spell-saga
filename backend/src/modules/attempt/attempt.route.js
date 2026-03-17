@@ -7,6 +7,7 @@ const { protect } = require('../../middleware/auth');
 router.use(protect);
 router.post('/start/:contestId', ctrl.start);
 router.post('/submit', validate(submitSchema), ctrl.submit);
+router.get('/user/recent', ctrl.getRecentAttempts);
 router.get('/user/:contestId', ctrl.getUserAttempts);
 
 module.exports = router;

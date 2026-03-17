@@ -16,3 +16,8 @@ exports.getUserAttempts = asyncHandler(async (req, res) => {
   const attempts = await svc.getUserAttempts(req.user._id, req.params.contestId);
   sendResponse(res, 200, 'User attempts', attempts);
 });
+
+exports.getRecentAttempts = asyncHandler(async (req, res) => {
+  const attempts = await svc.getRecentAttempts(req.user._id);
+  sendResponse(res, 200, 'Recent attempts', attempts);
+});

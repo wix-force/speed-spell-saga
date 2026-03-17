@@ -7,7 +7,7 @@ const contestSchema = new mongoose.Schema({
   duration:     { type: Number, required: true }, // seconds
   maxAttempts:  { type: Number, default: 3, min: 1, max: 10 },
   passagePool:  [{ type: mongoose.Schema.Types.ObjectId, ref: 'Passage' }],
-  randomPassage:  { type: Boolean, default: true },
+  randomPassage:  { type: Boolean, default: false },
   rankingMethod:  { type: String, enum: ['best', 'last', 'average'], default: 'best' },
   status:         { type: String, enum: ['upcoming', 'running', 'ended'], default: 'upcoming' },
   maxParticipants: { type: Number, default: 100 },

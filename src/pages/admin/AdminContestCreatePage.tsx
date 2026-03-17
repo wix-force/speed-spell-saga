@@ -3,9 +3,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 import apiClient from '@/lib/apiClient';
 import { toast } from 'sonner';
+import { useApiQuery } from '@/hooks/useApi';
 
 export default function AdminContestCreatePage() {
   const navigate = useNavigate();
@@ -17,14 +18,21 @@ export default function AdminContestCreatePage() {
     duration: 60,
     maxAttempts: 3,
     rankingMethod: 'best',
-    randomPassage: true,
+    passagePool: [] as string[],
     maxParticipants: 200,
   });
+  const { data: apiPassages, isLoading: isPassagesLoading } = useApiQuery<any>(['admin-passages'], '/passages');
+  const passageItems = Array.isArray(apiPassages) ? apiPassages : apiPassages?.passages ?? [];
 
   const update = (key: string, value: unknown) => setForm(f => ({ ...f, [key]: value }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (form.passagePool.length === 0) {
+      toast.error('Please select at least one passage');
+      return;
+    }
+
     setLoading(true);
     try {
       await apiClient.post('/contests', {
@@ -108,12 +116,41 @@ export default function AdminContestCreatePage() {
               ))}
             </div>
           </div>
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <div className="text-sm font-medium">Random Passage Mode</div>
-              <div className="text-xs text-muted-foreground">Each attempt gets a random passage from the pool</div>
+
+          <div>
+            <label className="text-sm font-medium mb-2 block">Passage Pool</label>
+            <div className="text-xs text-muted-foreground mb-3">Admin chooses which passages are included in this contest.</div>
+            <div className="space-y-2 max-h-56 overflow-y-auto rounded-lg border border-border p-2">
+              {isPassagesLoading ? (
+                <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+              ) : passageItems.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2 px-1">No passages found. Add passages first.</p>
+              ) : (
+                passageItems.map((p: any) => {
+                  const pid = p._id || p.id;
+                  const checked = form.passagePool.includes(pid);
+                  return (
+                    <label key={pid} className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-secondary cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          update(
+                            'passagePool',
+                            e.target.checked
+                              ? [...form.passagePool, pid]
+                              : form.passagePool.filter((id) => id !== pid)
+                          );
+                        }}
+                      />
+                      <Badge variant="outline" className="capitalize text-xs">{p.difficulty}</Badge>
+                      <span className="text-sm text-muted-foreground truncate">{p.text}</span>
+                    </label>
+                  );
+                })
+              )}
             </div>
-            <Switch checked={form.randomPassage} onCheckedChange={v => update('randomPassage', v)} />
+            <div className="mt-2 text-xs text-muted-foreground">Selected: {form.passagePool.length}</div>
           </div>
         </div>
 
