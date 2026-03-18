@@ -15,12 +15,16 @@ export default function TypingBox({ passage, duration, onComplete, onMetricsUpda
   const [timeLeft, setTimeLeft] = useState(duration);
   const [finished, setFinished] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const startTimeRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number>(0);
   const completedRef = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const getMetrics = useCallback((currentInput: string, currentTimeLeft: number): TypingMetrics => {
-    const elapsed = duration - currentTimeLeft;
-    const minutes = Math.max(elapsed / 60, 0.01);
+  // Use wall-clock time for accurate WPM
+  const getMetrics = useCallback((currentInput: string, secondsLeft: number): TypingMetrics => {
+    const elapsedMs = startTimeRef.current > 0 ? Date.now() - startTimeRef.current : 0;
+    const elapsedSec = Math.max(elapsedMs / 1000, 0.1);
+    const minutes = elapsedSec / 60;
+
     let correctChars = 0;
     let errors = 0;
     for (let i = 0; i < currentInput.length; i++) {
@@ -30,43 +34,62 @@ export default function TypingBox({ passage, duration, onComplete, onMetricsUpda
         errors++;
       }
     }
-    const wpm = elapsed > 0 ? Math.round((correctChars / 5) / minutes) : 0;
+
+    const wpm = currentInput.length > 0 ? Math.round((correctChars / 5) / minutes) : 0;
     const accuracy = currentInput.length > 0
-      ? Math.round(((correctChars) / currentInput.length) * 1000) / 10
+      ? Math.round((correctChars / currentInput.length) * 1000) / 10
       : 100;
     const progress = Math.min((currentInput.length / passage.length) * 100, 100);
-    return { wpm, accuracy, errors, elapsed, progress };
-  }, [duration, passage]);
 
-  // Timer
+    return { wpm, accuracy, errors, elapsed: Math.round(elapsedSec), progress };
+  }, [passage]);
+
+  // Single timer interval
   useEffect(() => {
     if (!started || finished) return;
-    if (timeLeft <= 0) {
-      if (!completedRef.current) {
-        completedRef.current = true;
-        setFinished(true);
-        onComplete(getMetrics(input, 0));
-      }
-      return;
-    }
-    const timer = setInterval(() => {
-      setTimeLeft(t => {
-        const next = t - 1;
+
+    timerRef.current = setInterval(() => {
+      setTimeLeft(prev => {
+        const next = prev - 1;
+        if (next <= 0) {
+          // Auto-submit on time end
+          if (!completedRef.current) {
+            completedRef.current = true;
+            setFinished(true);
+            // Use setTimeout to avoid setState during render
+            setTimeout(() => {
+              setInput(curr => {
+                onComplete(getMetrics(curr, 0));
+                return curr;
+              });
+            }, 0);
+          }
+          return 0;
+        }
         return next;
       });
     }, 1000);
-    return () => clearInterval(timer);
-  }, [started, timeLeft, finished, getMetrics, onComplete, input]);
 
-  // Live metrics update on every change
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [started, finished, getMetrics, onComplete]);
+
+  // Emit live metrics on every input change (truly live, not timer-dependent)
   useEffect(() => {
     if (started && !finished) {
-      const m = getMetrics(input, timeLeft);
-      onMetricsUpdate?.(m);
+      onMetricsUpdate?.(getMetrics(input, timeLeft));
     }
-  }, [input, timeLeft, started, finished, getMetrics, onMetricsUpdate]);
+  }, [input, started, finished, getMetrics, onMetricsUpdate, timeLeft]);
 
-  // Auto-complete when passage finished
+  // Also update metrics every second via timer tick
+  useEffect(() => {
+    if (started && !finished && input.length > 0) {
+      onMetricsUpdate?.(getMetrics(input, timeLeft));
+    }
+  }, [timeLeft]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-complete when full passage typed
   useEffect(() => {
     if (input.length >= passage.length && started && !finished && !completedRef.current) {
       completedRef.current = true;
@@ -78,11 +101,12 @@ export default function TypingBox({ passage, duration, onComplete, onMetricsUpda
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (finished) return;
     const val = e.target.value;
+
     if (!started) {
       setStarted(true);
       startTimeRef.current = Date.now();
     }
-    // Don't allow typing beyond passage length
+
     if (val.length <= passage.length) {
       setInput(val);
     }
@@ -92,7 +116,12 @@ export default function TypingBox({ passage, duration, onComplete, onMetricsUpda
     if (e.key === 'Tab') e.preventDefault();
   };
 
-  const currentMetrics = getMetrics(input, timeLeft);
+  // Prevent paste
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+  };
+
+  const currentMetrics = started ? getMetrics(input, timeLeft) : { wpm: 0, accuracy: 100, errors: 0, elapsed: 0, progress: 0 };
 
   return (
     <div
@@ -104,6 +133,7 @@ export default function TypingBox({ passage, duration, onComplete, onMetricsUpda
         value={input}
         onChange={handleInput}
         onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
         className="absolute opacity-0 w-0 h-0"
         autoFocus
         disabled={finished}
@@ -114,7 +144,7 @@ export default function TypingBox({ passage, duration, onComplete, onMetricsUpda
         <motion.div
           className="h-full bg-primary rounded-full"
           animate={{ width: `${currentMetrics.progress}%` }}
-          transition={{ duration: 0.2 }}
+          transition={{ duration: 0.15 }}
         />
       </div>
 
@@ -123,7 +153,7 @@ export default function TypingBox({ passage, duration, onComplete, onMetricsUpda
         <span className="text-sm text-muted-foreground">
           {!started ? 'Start typing to begin...' : finished ? 'Complete!' : 'Typing...'}
         </span>
-        <span className={`font-mono text-2xl font-bold ${timeLeft <= 10 && started ? 'text-destructive' : 'glow-text'}`}>
+        <span className={`font-mono text-2xl font-bold ${timeLeft <= 10 && started ? 'text-destructive animate-pulse' : 'glow-text'}`}>
           {timeLeft}s
         </span>
       </div>
